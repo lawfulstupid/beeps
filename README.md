@@ -1,5 +1,5 @@
 Installing:
-- Make sure you have [mid2beep](https://github.com/lawfulstupid/mid2beep) installed.
+- Make sure you have [mid2beep](https://github.com/lawfulstupid/mid2beep) and cURL installed.
 - Clone the project and add the root directory to your user PATH.
 
 Usage:
