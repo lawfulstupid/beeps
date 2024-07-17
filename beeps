@@ -1,0 +1,86 @@
+#!/bin/bash
+NOW_PLAYING=
+BEEPDIR=$(realpath $(dirname $0))/library
+BEEPFILES=($(ls -p $BEEPDIR | grep -v /))
+NUM_FILES=${#BEEPFILES[*]}
+PAGE_SIZE=10
+PAGE_MAX=$((NUM_FILES/PAGE_SIZE))
+PAGE=0
+SHOW_HELP=0
+
+function display {
+  local FILE=$1
+  FILE=${FILE//-/ }
+  echo $FILE
+}
+
+function play {
+  stop
+  $BEEPDIR/$1 &
+  NOW_PLAYING=$(display $1)
+  CHILD_PID=$!
+}
+
+function stop {
+  kill $CHILD_PID 2>/dev/null
+  pkill -SIGINT -x beep 2>/dev/null
+  NOW_PLAYING=
+}
+
+trap 'stop & exit' SIGINT
+while true; do
+  # Get the right nunbers
+  if [ $PAGE -lt 0 ]; then
+    PAGE=0
+  elif [ $PAGE -gt $PAGE_MAX ]; then
+    PAGE=$PAGE_MAX
+  fi
+  START_IDX=$((PAGE * PAGE_SIZE))
+  if [ $PAGE -eq $PAGE_MAX ]; then
+    END_IDX=$((NUM_FILES % PAGE_SIZE - 1))
+  else
+    END_IDX=$((START_IDX + PAGE_SIZE - 1))
+  fi
+  
+  # Write screen
+  clear
+  echo "Now playing: $NOW_PLAYING"
+  echo
+  for i in $(seq $START_IDX $END_IDX); do
+    echo "$i) $(display ${BEEPFILES[i]})"
+  done
+  echo "(page $((PAGE+1))/$((PAGE_MAX+1)))"
+  if [ $SHOW_HELP -eq 1 ]; then
+    echo
+    echo '0-9: Select track'
+    echo 'p: Next page'
+    echo 'q: Previous page'
+    echo 'x: Exit'
+    echo 'h: Toggle help'
+  fi
+  read -s -n 1 SELECTION
+
+  # Process command
+  case ${SELECTION,,} in
+    -|q|a|z|,)
+      ((PAGE--))
+      ;;
+    +|p|l|m|.|\n)
+      ((PAGE++))
+      ;;
+    0|1|2|3|4|5|6|7|8|9)
+      if [ $SELECTION -le $END_IDX ]; then
+        IDX=$((PAGE*PAGE_SIZE+SELECTION))
+        play ${BEEPFILES[IDX]}
+      fi
+      ;;
+    x|$'\e')
+      stop
+      echo
+      exit
+      ;;
+    h|\?)
+      SHOW_HELP=$((1-SHOW_HELP))
+      ;;
+  esac
+done

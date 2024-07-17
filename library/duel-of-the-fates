@@ -1,0 +1,4 @@
+partbeep 20 $0.d/strings-low
+partbeep 20 $0.d/strings-high
+partbeep 36 $0.d/sweep -s
+partbeep 20 $0.d/strings-low

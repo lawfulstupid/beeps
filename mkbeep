@@ -1,0 +1,152 @@
+#!/bin/bash
+echo $0
+exit
+BEEPDIR=$(realpath $(dirname $0))/library
+WORKDIR=/tmp/beeps
+mkdir -p $WORKDIR
+MIDIFILE=$WORKDIR/input.mid
+INFOFILE=$WORKDIR/info
+
+function mid2beep {
+  ~/mid2beep/mid2beep -m=$MIDIFILE -p $*
+}
+
+# Download MIDI
+if [ ! -z $1 ]; then
+  echo "Downloading MIDI..."
+  curl -s $1 > $MIDIFILE
+  rm $INFOFILE
+fi
+
+# Get info
+if [ ! -f $INFOFILE ]; then
+  echo "Extracting MIDI Info..."
+  mid2beep -i -q -b -c=-1 > $INFOFILE
+fi
+CHANNELS=($(cat $INFOFILE | cut -d ' ' -f 17-))
+
+function rmBeepfile {
+  rm $BEEPFILE
+}
+
+function processChannel {
+  local CHANNEL=$1
+  local BEEPFILE=$WORKDIR/beep$CHANNEL
+  mid2beep -q -c=$CHANNEL 2>&1 >$BEEPFILE | grep '^' >/dev/null
+  if [ $? -eq 0 ]; then
+    rmBeepfile # error occurred
+  fi
+}
+
+echo "Processing MIDI Channels..."
+rm $WORKDIR/beep* 2>/dev/null
+for CHANNEL in ${CHANNELS[*]}; do
+  processChannel $CHANNEL &
+done
+wait
+
+sed -i 's/-n/\\\n\t-n/g' $WORKDIR/beep*
+chmod +x $WORKDIR/beep*
+
+# Kills any currently playing beeps before terminating
+function recExit {
+  pkill -SIGINT -x beep
+  exit  1
+}
+
+function queryRmChannel {
+  local INPUT
+  while true; do
+    read -p "Keep? [Y/n] " -n 1 INPUT
+    if [ "$INPUT" == "\n" ]; then
+      return 1
+    elif [ ${INPUT,,} == y ]; then
+      echo
+      return 1
+    elif [ ${INPUT,,} == n ]; then
+      echo
+      return 0
+    else
+      echo -ne '\r'
+    fi
+  done
+}
+
+DO_REVIEW=1
+function queryReviewLoop {
+  local CHANNELS=($(getChannels))
+  if [ ${#CHANNELS[*]} -eq 0 ]; then
+    DO_REVIEW=0
+    return
+  fi
+  echo "Remaining channels: ${CHANNELS[*]}"
+  local INPUT
+  while true; do
+    read -p "Review or save? " -n 1 INPUT
+    if [ "$INPUT" == "\n" ]; then
+      return
+    elif [ ${INPUT,,} == r ]; then
+      echo
+      return
+    elif [ ${INPUT,,} == s ]; then
+      echo
+      DO_REVIEW=0
+      return
+    else
+      echo -ne '\r'
+    fi
+  done
+}
+
+function getChannels {
+  local BEEPFILE
+  for BEEPFILE in $(ls $WORKDIR/beep* 2>/dev/null); do
+    local FILENAME=$(basename $BEEPFILE)
+    echo ${FILENAME:4}
+  done
+}
+
+trap recExit SIGINT
+while [ $DO_REVIEW -eq 1 ]; do
+  COUNTER=0
+  CHANNELS=($(getChannels))
+  for CHANNEL in ${CHANNELS[*]}; do
+    BEEPFILE=$WORKDIR/beep$CHANNEL
+    ((COUNTER++))
+    echo "Playing channel $CHANNEL ($COUNTER/${#CHANNELS[*]})"
+    $BEEPFILE &
+    if queryRmChannel; then
+      rmBeepfile
+    fi
+    pkill -SIGINT -x beep # Stop playing
+  done
+  queryReviewLoop
+done
+trap - SIGINT
+
+CHANNELS=($(getChannels))
+if [ ${#CHANNELS[*]} -eq 0 ]; then
+  echo "No remaining channels!"
+  exit
+elif [ ${#CHANNELS[*]} -gt 1 ]; then
+  GROUPNAME=
+  read -p "File group name: (optional): " GROUPNAME
+  if [ ! -z $GROUPNAME ]; then
+    touch $BEEPDIR/$GROUPNAME
+    chmod +x $BEEPDIR/$GROUPNAME
+    BEEPDIR=$BEEPDIR/$GROUPNAME.d
+    mkdir -p $BEEPDIR
+  fi
+fi
+
+echo
+for CHANNEL in ${CHANNELS[*]}; do
+  BEEPFILE=$WORKDIR/beep$CHANNEL
+  read -p "Channel $CHANNEL filename: " FILENAME
+  if [ ! -z $FILENAME ]; then
+    mv $BEEPFILE $BEEPDIR/$FILENAME
+    if [ ! -z $GROUPNAME ]; then
+      echo "\$0.d/$FILENAME" >> $BEEPDIR/../$GROUPNAME
+    fi
+  fi
+done

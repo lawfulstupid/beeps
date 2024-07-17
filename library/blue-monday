@@ -1,0 +1,3 @@
+partbeep $((14*2)) $0.d/drums
+partbeep $((24*4-1)) $0.d/intro
+partbeep 51 $0.d/vocals
