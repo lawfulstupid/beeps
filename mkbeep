@@ -1,6 +1,4 @@
 #!/bin/bash
-echo $0
-exit
 BEEPDIR=$(realpath $(dirname $0))/library
 WORKDIR=/tmp/beeps
 mkdir -p $WORKDIR
